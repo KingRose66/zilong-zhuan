@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<title>子龙传：长坂孤骑 · 街机像素版 V9</title>
+<title>子龙传：长坂孤骑 · 街机像素版 V10</title>
 <style>
 html,body{margin:0;height:100%;overflow:hidden;background:#0d0f0d;color:#eee;font-family:"Microsoft YaHei",system-ui,sans-serif}
 body{display:grid;place-items:center}
@@ -29,6 +29,7 @@ let score=0,merit=0,totalKills=0,totalRescued=0,combo=0,comboTimer=0,maxCombo=0,
 let stageTrack={startKills:0,startRescued:0,maxCombo:0,breaks:0,rewarded:false};
 let upgradeChoices=[],selectedUpgrade=-1;
 let lootNotice=null,fieldEvent=null;
+let relics=[];
 const gear={weapon:'龙胆亮银枪',armor:'白袍银甲',horse:'素鞍',treasure:'—'};
 const gearOwned={stirrups:false,mirror:false,qinggang:false,tiger:false};
 const skillLevels={rider:0,spear:0,dragon:0};
@@ -62,14 +63,14 @@ const STAGES=[
 ];
 
 const P={x:120,y:260,vx:0,vy:0,face:1,hp:180,maxhp:180,stam:100,dragon:0,inv:0,attack:null,attackQueued:false,heavyCharge:0,dash:0,dashCd:0,dashHits:new Set(),ult:null,anim:0,weapon:'spear',qinggang:false,baby:false,
- dmgMul:1,speedMul:1,dragonMul:1,maxStam:100,stamRegen:28,armor:0,dashCost:26,dashDX:1,dashDY:0,dashDmgMul:1,dashCdMul:1,dashSpeedMul:1,dashHitStam:0,dashHitDragon:0,dashBossBreak:false,spearReachMul:1,basicDmgMul:1,comboGrace:0,thirdDragon:0,thirdBreak:false,dragonRegen:0,ultDmgMul:1,ultRefund:0,ultCost:100,ultPostInv:.45};
+ dmgMul:1,speedMul:1,dragonMul:1,maxStam:100,stamRegen:28,armor:0,dashCost:26,dashDX:1,dashDY:0,dashDmgMul:1,dashCdMul:1,dashSpeedMul:1,dashHitStam:0,dashHitDragon:0,dashBossBreak:false,spearReachMul:1,basicDmgMul:1,comboGrace:0,thirdDragon:0,thirdBreak:false,dragonRegen:0,ultDmgMul:1,ultRefund:0,ultCost:100,ultPostInv:.45,evadeReady:false};
 
 function resetRun(){
- score=0;merit=0;totalKills=0;totalRescued=0;combo=0;maxCombo=0;lootNotice=null;
+ score=0;merit=0;totalKills=0;totalRescued=0;combo=0;maxCombo=0;lootNotice=null;relics=[];
  Object.assign(gear,{weapon:'龙胆亮银枪',armor:'白袍银甲',horse:'素鞍',treasure:'—'});
  Object.assign(gearOwned,{stirrups:false,mirror:false,qinggang:false,tiger:false});
  Object.assign(skillLevels,{rider:0,spear:0,dragon:0});skillLearned.rider=[];skillLearned.spear=[];skillLearned.dragon=[];
- Object.assign(P,{hp:180,maxhp:180,stam:100,dragon:0,dmgMul:1,speedMul:1,dragonMul:1,maxStam:100,stamRegen:28,armor:0,dashCost:26,dashDX:1,dashDY:0,dashDmgMul:1,dashCdMul:1,dashSpeedMul:1,dashHitStam:0,dashHitDragon:0,dashBossBreak:false,spearReachMul:1,basicDmgMul:1,comboGrace:0,thirdDragon:0,thirdBreak:false,dragonRegen:0,ultDmgMul:1,ultRefund:0,ultCost:100,ultPostInv:.45,qinggang:false,baby:false,weapon:'spear'});startStage(0)
+ Object.assign(P,{hp:180,maxhp:180,stam:100,dragon:0,dmgMul:1,speedMul:1,dragonMul:1,maxStam:100,stamRegen:28,armor:0,dashCost:26,dashDX:1,dashDY:0,dashDmgMul:1,dashCdMul:1,dashSpeedMul:1,dashHitStam:0,dashHitDragon:0,dashBossBreak:false,spearReachMul:1,basicDmgMul:1,comboGrace:0,thirdDragon:0,thirdBreak:false,dragonRegen:0,ultDmgMul:1,ultRefund:0,ultCost:100,ultPostInv:.45,evadeReady:false,qinggang:false,baby:false,weapon:'spear'});startStage(0)
 }
 function startStage(i){stageIndex=i;mode='play';time=0;stageTime=0;camX=0;shake=0;flash=0;hitStop=0;slowMo=0;enemies=[];projectiles=[];civilians=[];slashes=[];floaters=[];afterimages=[];pickups=[];arena=null;encounterIndex=0;clearTimer=0;stageBanner=2.8;selectedUpgrade=-1;stageTrack={startKills:totalKills,startRescued:totalRescued,maxCombo:0,breaks:0,rewarded:false};fieldEvent=makeStageEvent(i);
  Object.assign(P,{x:115,y:260,vx:0,vy:0,face:1,stam:P.maxStam,dragon:Math.min(P.dragon,60),inv:1.0,attack:null,attackQueued:false,heavyCharge:0,dash:0,dashCd:0,ult:null,anim:0});
@@ -123,15 +124,22 @@ function bodyRect(o){return{x:o.x-12,y:o.y-36,w:24,h:34}}
 function screenX(wx){return wx-camX}
 
 function spawnEnemy(type,x,y,bossKind=null){
- let hp=70,speed=45,damage=12,w=18,h=36,boss=false,name='曹军';
+ let hp=70,speed=45,damage=12,w=18,h=36,boss=false,name='曹军',affix=null,affixLabel='',armorMul=1;
  if(type==='spear'){hp=86;speed=40;damage=14;name='曹军枪兵'}
  if(type==='archer'){hp=58;speed=34;damage=12;name='曹军弓手'}
- if(type==='elite'){hp=150;speed=48;damage=18;name='曹军精锐'}
+ if(type==='elite'){
+   hp=150;speed=48;damage=18;name='曹军精锐';
+   const a=['iron','swift','fury'][(Math.random()*3)|0];affix=a;
+   if(a==='iron'){affixLabel='铁甲';hp=185;armorMul=.82}
+   if(a==='swift'){affixLabel='疾锋';speed=62;damage=19}
+   if(a==='fury'){affixLabel='悍勇';hp=165;damage=20}
+ }
  if(type==='boss'){boss=true;w=31;h=50;
    const map={captain:['曹强',900,52,14],chunyu:['淳于导',1250,57,16],xiahou:['夏侯恩',1650,62,18],zhanghe:['张郃',2250,68,20]};
    const m=map[bossKind];name=m[0];hp=m[1];speed=m[2];damage=m[3];
  }
- enemies.push({x,y,vx:0,vy:0,type,boss,bossKind,name,hp,maxhp:hp,speed,damage,w,h,face:-1,stun:0,stunVisual:0,breakFlash:0,flash:0,ifr:0,attack:null,ai:0,dead:false,knockX:0,knockY:0,anim:rnd(0,10),rage:false,guard:0,hitCount:0,deathTimer:0,special1:false,special2:false});
+ const e={x,y,vx:0,vy:0,type,boss,bossKind,name,hp,maxhp:hp,speed,damage,w,h,face:-1,stun:0,stunVisual:0,breakFlash:0,flash:0,ifr:0,attack:null,ai:0,dead:false,knockX:0,knockY:0,anim:rnd(0,10),rage:false,guard:affix==='iron'?.45:0,hitCount:0,deathTimer:0,special1:false,special2:false,affix,affixLabel,armorMul,affixActive:false,challenge:false};
+ enemies.push(e);return e;
 }
 function makeStageEvent(i){
  const pools=[
@@ -140,28 +148,45 @@ function makeStageEvent(i){
   [{type:'drum',name:'曹军战鼓',desc:'毁掉战鼓',x:760,y:245},{type:'standard',name:'中军大纛',desc:'夺取军旗',x:1320,y:287}],
   [{type:'cache',name:'败军辎重',desc:'搜索辎重',x:760,y:242},{type:'standard',name:'曹军号旗',desc:'斩断号旗',x:1370,y:284}]
  ];
- const c=pools[i][(Math.random()*pools[i].length)|0];return {...c,done:false,anim:rnd(0,6)};
+ const c=pools[i][(Math.random()*pools[i].length)|0];return {...c,done:false,anim:rnd(0,6),duelX:Math.min(STAGES[i].worldW-520,c.x+260),duelY:i%2?236:286,duelState:'locked'};
+}
+function startOptionalDuel(){
+ if(!fieldEvent||fieldEvent.duelState!=='ready'||arena)return;
+ fieldEvent.duelState='active';
+ const e=spawnEnemy('elite',fieldEvent.duelX+115,fieldEvent.duelY);
+ e.challenge=true;e.name=['虎豹骑校尉','陷阵都伯','中军锐士','宿卫牙将'][stageIndex];
+ e.hp=310+stageIndex*90;e.maxhp=e.hp;e.damage+=3+stageIndex;e.speed+=4;
+ spawnEnemy(stageIndex>=2?'spear':'sword',fieldEvent.duelX+175,clamp(fieldEvent.duelY-48,LANE_TOP,LANE_BOTTOM));
+ if(stageIndex>=1)spawnEnemy('archer',fieldEvent.duelX+205,clamp(fieldEvent.duelY+44,LANE_TOP,LANE_BOTTOM));
+ arena={left:fieldEvent.duelX-115,right:Math.min(STAGES[stageIndex].worldW-80,fieldEvent.duelX+390),enc:{optional:true},clearHold:0};
+ floater(P.x+90,P.y-76,'隐藏邀战 · '+e.name,'#ffe0a0',1.3);shake=3;
 }
 function updateFieldEvent(dt){
- if(!fieldEvent||fieldEvent.done)return;fieldEvent.anim+=dt*4;
- if(dist(P,fieldEvent)<40&&pressed['x']){
-  fieldEvent.done=true;let desc='';
+ if(!fieldEvent)return;fieldEvent.anim+=dt*4;
+ if(!fieldEvent.done&&dist(P,fieldEvent)<40&&pressed['x']){
+  fieldEvent.done=true;fieldEvent.duelState='ready';let desc='';
   if(fieldEvent.type==='scout'){merit+=55;P.dragon=clamp(P.dragon+22,0,100);desc='战功 +55 · 龙胆 +22'}
   else if(fieldEvent.type==='cache'){merit+=45;P.stam=clamp(P.stam+45,0,P.maxStam);spawnPickup(fieldEvent.x+18,fieldEvent.y,'merit');desc='战功 +45 · 恢复体力'}
   else if(fieldEvent.type==='refugee'){merit+=60;totalRescued++;P.hp=Math.min(P.maxhp,P.hp+22);desc='救人 +1 · 战功 +60'}
   else if(fieldEvent.type==='medicine'){const heal=Math.round(P.maxhp*.28);P.hp=Math.min(P.maxhp,P.hp+heal);merit+=35;desc='生命 +'+heal+' · 战功 +35'}
   else if(fieldEvent.type==='drum'){merit+=70;P.dmgMul*=1.04;desc='战功 +70 · 本轮攻击 +4%'}
   else if(fieldEvent.type==='standard'){merit+=60;P.dragonMul*=1.06;desc='战功 +60 · 龙胆获取 +6%'}
-  score+=400;lootNotice={t:2.6,title:'奇遇完成：'+fieldEvent.name,desc};floater(P.x,P.y-75,'支线完成','#fff0aa',1.0);
+  score+=400;lootNotice={t:2.6,title:'奇遇完成：'+fieldEvent.name,desc:desc+' · 解锁隐藏邀战'};floater(P.x,P.y-75,'支线完成','#fff0aa',1.0);
  }
+ if(fieldEvent.done&&fieldEvent.duelState==='ready'&&Math.hypot(P.x-fieldEvent.duelX,P.y-fieldEvent.duelY)<48&&pressed['x'])startOptionalDuel();
 }
 function drawFieldEvent(){
- if(!fieldEvent||fieldEvent.done)return;const x=screenX(fieldEvent.x),y=fieldEvent.y,b=Math.sin(fieldEvent.anim)*2;
- if(x<-40||x>W+40)return;shadow(x,y,24);
- if(fieldEvent.type==='scout'||fieldEvent.type==='refugee'){px(x-7,y-26+b,14,18,'#766a4c');px(x-5,y-38+b,10,10,'#c9a57b');px(x-7,y-43+b,14,5,'#4c3b2d')}
- else if(fieldEvent.type==='medicine'||fieldEvent.type==='cache'){px(x-13,y-20+b,26,18,'#7a5433');px(x-11,y-18+b,22,5,'#b18b53');txt(fieldEvent.type==='medicine'?'药':'军',x,y-9+b,8,'#efe1b8','center')}
- else {px(x-2,y-42+b,4,44,'#5b3925');px(x+2,y-39+b,24,16,fieldEvent.type==='drum'?'#8f3b2d':'#9d3230');txt(fieldEvent.type==='drum'?'鼓':'曹',x+14,y-31+b,8,'#f0d7ae','center')}
- txt('?',x,y-54+b,10,'#ffe49b','center');
+ if(!fieldEvent)return;
+ if(!fieldEvent.done){
+   const x=screenX(fieldEvent.x),y=fieldEvent.y,b=Math.sin(fieldEvent.anim)*2;if(x<-40||x>W+40)return;shadow(x,y,24);
+   if(fieldEvent.type==='scout'||fieldEvent.type==='refugee'){px(x-7,y-26+b,14,18,'#766a4c');px(x-5,y-38+b,10,10,'#c9a57b');px(x-7,y-43+b,14,5,'#4c3b2d')}
+   else if(fieldEvent.type==='medicine'||fieldEvent.type==='cache'){px(x-13,y-20+b,26,18,'#7a5433');px(x-11,y-18+b,22,5,'#b18b53');txt(fieldEvent.type==='medicine'?'药':'军',x,y-9+b,8,'#efe1b8','center')}
+   else {px(x-2,y-42+b,4,44,'#5b3925');px(x+2,y-39+b,24,16,fieldEvent.type==='drum'?'#8f3b2d':'#9d3230');txt(fieldEvent.type==='drum'?'鼓':'曹',x+14,y-31+b,8,'#f0d7ae','center')}
+   txt('?',x,y-54+b,10,'#ffe49b','center');
+ }else if(fieldEvent.duelState==='ready'){
+   const x=screenX(fieldEvent.duelX),y=fieldEvent.duelY,b=Math.sin(fieldEvent.anim)*2;if(x<-40||x>W+40)return;shadow(x,y,28);
+   px(x-2,y-48+b,4,50,'#5b3925');px(x+2,y-46+b,30,20,'#5d2521');txt('战',x+17,y-36+b,10,'#f2d69b','center');txt('!',x,y-58+b,10,'#ffe49b','center');
+ }
 }
 function spawnWave(enc){
  const center=enc.x+150,ys=[205,245,285,315];
@@ -203,7 +228,7 @@ function dashInput(){
  let dx=(keys['d']?1:0)-(keys['a']?1:0),dy=((keys['s']?1:0)-(keys['w']?1:0))*.58;
  if(dx===0)dx=P.face;if(dx!==0)P.face=dx>0?1:-1;
  const m=Math.hypot(dx,dy)||1;P.dashDX=dx/m;P.dashDY=dy/m;
- P.dash=.34;P.dashCd=.56*P.dashCdMul;P.stam-=P.dashCost;P.inv=.39;P.dashHits=new Set();P.vx=P.dashDX*290*P.dashSpeedMul;P.vy=P.dashDY*290*P.dashSpeedMul;shake=2;
+ P.dash=.34;P.dashCd=.56*P.dashCdMul;P.stam-=P.dashCost;P.inv=.39;P.evadeReady=true;P.dashHits=new Set();P.vx=P.dashDX*290*P.dashSpeedMul;P.vy=P.dashDY*290*P.dashSpeedMul;shake=2;
 }
 function ultInput(){
  if(mode!=='play'||P.dragon<P.ultCost||P.ult||P.attack)return;
@@ -232,8 +257,8 @@ function hurtEnemy(e,dmg,kx,ky,guardBreak=false,stagger=false){
  if(e.dead)return;
  if(e.guard>0&&!guardBreak){dmg*=.22;kx*=.12;floater(e.x,e.y-48,'格挡','#d9d4bd',.55)}
  else if(e.guard>0&&guardBreak){e.guard=0;floater(e.x,e.y-48,'破防！','#ffe39a',.7);dmg*=1.30;stagger=true;if(e.boss){stageTrack.breaks++;merit+=8;floater(e.x,e.y-76,'战功 +8','#e8d49c',.55)}}
- if(e.boss)dmg*=.68;
- e.hp-=dmg;e.flash=stagger&&e.boss?.15:.075;e.ifr=.025;
+ if(e.boss)dmg*=.68;if(e.affix==='iron')dmg*=e.armorMul;
+ e.hp-=dmg;e.flash=stagger&&e.boss?.15:.075;e.ifr=.025;if(e.affix==='iron'&&!guardBreak&&e.hitCount>0&&e.hitCount%4===0)e.guard=Math.max(e.guard,.42);
  if(e.boss&&stagger){
    e.stun=.48;e.stunVisual=.58;e.breakFlash=.58;e.attack=null;e.ai=Math.max(e.ai,.46);
    hitStop=Math.max(hitStop,.10);shake=Math.max(shake,6);flash=Math.max(flash,.045);
@@ -244,10 +269,21 @@ function hurtEnemy(e,dmg,kx,ky,guardBreak=false,stagger=false){
  combo++;comboTimer=2.2+P.comboGrace;maxCombo=Math.max(maxCombo,combo);stageTrack.maxCombo=Math.max(stageTrack.maxCombo,combo);score+=Math.round(dmg*(1+Math.min(combo,30)*.03));P.dragon=clamp(P.dragon+(e.boss?3.5:6)*P.dragonMul*comboDragonMul(),0,100);
  floater(e.x,e.y-e.h-5,Math.round(dmg).toString(),e.boss?'#ffe19a':'#f5e7c9',.48);
  if(e.hp<=0){e.hp=0;e.dead=true;e.flash=0;e.deathTimer=e.boss?.7:.34;totalKills++;score+=e.boss?1200:120;
-   const gain=e.boss?100:(e.type==='elite'?24:10);merit+=gain;
+   const gain=e.boss?100:(e.challenge?75:e.type==='elite'?28:10);merit+=gain;
    if(e.boss){awardBossGear(e);shake=7;flash=.12;floater(e.x,e.y-70,`${e.name} · 击破`,'#fff0b0',1.5)}
-   else {floater(e.x,e.y-48,`斩 · 战功+${gain}`,'#e9d39f',.55);if(Math.random()<(e.type==='elite'?.42:.18))spawnPickup(e.x,e.y-12)}
+   else {floater(e.x,e.y-48,`斩 · 战功+${gain}`,'#e9d39f',.55);if(e.challenge)awardDuelRelic(e);else if(Math.random()<(e.type==='elite'?.55:.18))spawnPickup(e.x,e.y-12)}
  }
+}
+function awardDuelRelic(e){
+ if(fieldEvent)fieldEvent.duelState='won';
+ const pool=[
+  {n:'破军令',d:'普攻与冲阵伤害 +8%',a:()=>{P.basicDmgMul*=1.08;P.dashDmgMul*=1.08}},
+  {n:'龙纹玉',d:'最大生命 +20，并回复20',a:()=>{P.maxhp+=20;P.hp=Math.min(P.maxhp,P.hp+20)}},
+  {n:'白羽符',d:'移动 +4%，冲阵冷却 -7%',a:()=>{P.speedMul*=1.04;P.dashCdMul*=.93}},
+  {n:'将星佩',d:'龙胆获取 +10%，大招伤害 +6%',a:()=>{P.dragonMul*=1.10;P.ultDmgMul*=1.06}}
+ ].filter(r=>!relics.includes(r.n));
+ const r=(pool.length?pool:[{n:'战功札',d:'战功 +120',a:()=>merit+=120}])[(Math.random()*(pool.length||1))|0];r.a();relics.push(r.n);score+=700;
+ lootNotice={t:3.0,title:'隐藏邀战胜利：'+r.n,desc:r.d};floater(e.x,e.y-76,'秘宝入手','#fff0aa',1.2);
 }
 function awardBossGear(e){
  const a=applyRandomAffix();
@@ -266,7 +302,10 @@ function awardBossGear(e){
  }
 }
 function hurtPlayer(dmg,sourceX,isBoss=false){
- if(P.inv>0)return;dmg*=1-P.armor;P.hp-=dmg;P.inv=isBoss?.72:.55;P.vx=sign(P.x-sourceX)*(isBoss?165:130);P.vy=0;combo=0;comboTimer=0;shake=isBoss?6:5;flash=.06;floater(P.x,P.y-58,'-'+Math.round(dmg),'#ffb7a3',.8);if(P.hp<=0){P.hp=0;mode='dead'}
+ if(P.inv>0){
+   if(P.dash>0&&P.evadeReady){P.evadeReady=false;P.dragon=clamp(P.dragon+12,0,100);P.stam=clamp(P.stam+8,0,P.maxStam);merit+=5;hitStop=Math.max(hitStop,.055);flash=Math.max(flash,.025);floater(P.x,P.y-64,'惊险闪避 · 龙胆+12','#dceceb',.75)}
+   return;
+ }dmg*=1-P.armor;P.hp-=dmg;P.inv=isBoss?.72:.55;P.vx=sign(P.x-sourceX)*(isBoss?165:130);P.vy=0;combo=0;comboTimer=0;shake=isBoss?6:5;flash=.06;floater(P.x,P.y-58,'-'+Math.round(dmg),'#ffb7a3',.8);if(P.hp<=0){P.hp=0;mode='dead'}
 }
 
 function updatePlayer(dt){
@@ -338,6 +377,7 @@ function updateEnemy(e,dt){
  e.x+=e.knockX*dt;e.y+=e.knockY*dt;e.knockX*=Math.pow(.008,dt);e.knockY*=Math.pow(.008,dt);e.y=clamp(e.y,LANE_TOP,LANE_BOTTOM);
  if(e.stun>0)return;
  const dx=P.x-e.x,dy=P.y-e.y,ad=Math.abs(dx),lane=Math.abs(dy);e.face=dx>=0?1:-1;
+ if(e.affix==='fury'&&!e.affixActive&&e.hp<e.maxhp*.5){e.affixActive=true;e.speed*=1.25;e.damage*=1.22;floater(e.x,e.y-58,'悍勇 · 狂战','#ffbf8f',.75)}
  if(e.boss&&!e.special1&&e.hp<e.maxhp*.72){e.special1=true;triggerBossSpecial(e,1)}
  if(e.boss&&!e.rage&&e.hp<e.maxhp*.5){e.rage=true;e.speed*=1.12;e.damage*=1.08;e.guard=1.0;floater(e.x,e.y-65,'二阶段 · 霸体','#ffcc8d',1.0);flash=.07;shake=4;}
  if(e.boss&&!e.special2&&e.hp<e.maxhp*.28){e.special2=true;triggerBossSpecial(e,2)}
@@ -540,7 +580,12 @@ function drawSoldier(e){
  if(e.type==='archer'){px(16,-31+bob,3,35,'#8d6b42');px(19,-30+bob,11,2,'#c0aa82');px(19,2+bob,11,2,'#c0aa82');px(24,-20+bob,2,18,'#ded6b8')}
  else if(e.type==='spear'){px(15,-29+bob,52,3,'#68462a');px(64,-33+bob,10,9,'#c8d0cf');px(72,-32+bob,6,7,'#e0e4e1')}
  else {px(15,-27+bob,35,3,'#c3c9c4');px(47,-31+bob,6,11,'#e0e2dc')}
+ if(e.affix==='iron'){px(-15,-34+bob,5,27,'#73797a');px(12,-34+bob,5,27,'#73797a')}
+ if(e.affix==='swift'){px(-12,-58+bob,5,11,'#d9b34f')}
+ if(e.affix==='fury'){px(-15,-30+bob,4,19,'#9b342d')}
  g.restore();
+ if(e.affixLabel)txt('['+e.affixLabel+']',x,y-68,7,e.affix==='iron'?'#d6d1bd':e.affix==='swift'?'#ffe09a':'#ffb38f','center');
+ if(e.challenge){box(x-48,y-83,96,13,'#17140eee','#9b7a48');txt(e.name,x,y-76,7,'#ffe3a3','center');px(x-39,y-64,78,4,'#29211b');px(x-38,y-63,76*clamp(e.hp/e.maxhp,0,1),2,'#bd5540')}
 }
 function drawBossSprite(e,bob){
  const flashc=e.flash>0?'#fff5d9':null;const kind=e.bossKind,stunned=(e.stunVisual||0)>0;
@@ -603,6 +648,7 @@ function drawUI(){
  }
  if(arena)txt('战斗区域封锁',W/2,H-16,8,'#f0c98d','center');
  if(fieldEvent&&!fieldEvent.done&&dist(P,fieldEvent)<70){box(W/2-94,H-63,188,22,'#1b1710e8','#9c7d48');txt('X 互动：'+fieldEvent.desc,W/2,H-52,8,'#ffe6aa','center')}
+ if(fieldEvent?.duelState==='ready'&&Math.hypot(P.x-fieldEvent.duelX,P.y-fieldEvent.duelY)<80){box(W/2-110,H-88,220,22,'#24170fe8','#aa7848');txt('X 隐藏邀战：高风险 / 秘宝奖励',W/2,H-77,8,'#ffd99b','center')}
  if(lootNotice){box(W/2-126,118,252,42,'#18160fef','#d2ae59');txt(lootNotice.title,W/2,131,10,'#fff0af','center');txt(lootNotice.desc,W/2,147,7,'#e1d2ad','center')}
 }
 function drawGear(){
@@ -616,8 +662,8 @@ function drawGear(){
  rows.forEach((r,i)=>{const y=91+i*31;box(106,y-12,428,25,'#1a1d17','#625943');txt(r[0],120,y,7,'#cbbd9d');txt(r[1],176,y-1,9,'#f3e1b7');txt(r[2],520,y+6,6,'#bfb49c','right')});
  const paths=[['骑战',skillLevels.rider,skillLearned.rider],['枪术',skillLevels.spear,skillLearned.spear],['龙胆',skillLevels.dragon,skillLearned.dragon]];
  paths.forEach((r,i)=>{const y=226+i*22;txt(`${r[0]}  ${'◆'.repeat(r[1])}${'◇'.repeat(3-r[1])}`,116,y,8,'#ffe0a0');txt(r[2].length?r[2].join(' / '):'尚未习得战技',214,y,7,'#d6c9aa')});
- txt(`攻击×${(P.dmgMul*P.basicDmgMul).toFixed(2)}  枪距×${P.spearReachMul.toFixed(2)}  大招×${P.ultDmgMul.toFixed(2)}  战功${merit}`,W/2,296,7,'#e0d2b3','center');
- txt('按 I 返回战场',W/2,314,7,'#ffe7aa','center');
+ txt(`秘宝 ${relics.length?relics.join(' / '):'—'}`,116,288,7,'#d8c79f');txt(`攻击×${(P.dmgMul*P.basicDmgMul).toFixed(2)}  枪距×${P.spearReachMul.toFixed(2)}  大招×${P.ultDmgMul.toFixed(2)}  战功${merit}`,W/2,303,7,'#e0d2b3','center');
+ txt('按 I 返回战场',W/2,319,7,'#ffe7aa','center');
 }
 function drawBanner(){if(stageBanner<=0)return;const a=clamp(stageBanner/.45,0,1);g.globalAlpha=a;box(120,102,400,96,'#10110deb','#86744d');txt(STAGES[stageIndex].name,W/2,128,20,'#f0d89f','center');txt(STAGES[stageIndex].sub,W/2,153,11,'#d7c49a','center');txt(STAGES[stageIndex].story,W/2,181,8,'#ddd4c0','center');g.globalAlpha=1}
 function drawTitle(){
@@ -625,7 +671,7 @@ function drawTitle(){
  txt('子 龙 传',W/2,82,38,'#ead7a0','center');txt('长 坂 孤 骑',W/2,122,17,'#c7b487','center');txt('ARCADE PIXEL EDITION',W/2,148,8,'#91866f','center');
  const ox=P.x,oy=P.y,of=P.face;P.x=220;P.y=278;P.face=1;drawHorsePlayer(P.x,P.y,1,1);P.x=ox;P.y=oy;P.face=of;
  const fake={x:430,y:279,type:'elite',boss:false,face:-1,flash:0,anim:0,w:18,h:36};drawSoldier(fake);
- txt('四关街机流程 · 差异Boss机制 · 随机战场奇遇 · 三系流派树 · 装备词条',W/2,298,8,'#d8ceb7','center');
+ txt('精锐词缀 · 完美闪避 · 隐藏邀战秘宝 · 差异Boss · 三系流派树',W/2,298,8,'#d8ceb7','center');
  txt('K按住蓄力，松开=破阵突刺；二段以上破防，满蓄强硬直',W/2,315,8,'#cdbf9f','center');txt('点击 / ENTER 开始',W/2,338,11,'#ffe09a','center')
 }
 function drawStageClear(){
