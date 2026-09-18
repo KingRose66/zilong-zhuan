@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<title>子龙传：长坂孤骑 · 街机像素版 V6</title>
+<title>子龙传：长坂孤骑 · 街机像素版 V7</title>
 <style>
 html,body{margin:0;height:100%;overflow:hidden;background:#0d0f0d;color:#eee;font-family:"Microsoft YaHei",system-ui,sans-serif}
 body{display:grid;place-items:center}
@@ -24,8 +24,9 @@ const W=640,H=360,LANE_TOP=170,LANE_BOTTOM=320;
 const keys={},pressed={};
 const mouse={x:W/2,y:H/2,left:false,right:false};
 let mode='title',stageIndex=0,time=0,stageTime=0,camX=0,shake=0,flash=0,hitStop=0,slowMo=0,debugHit=false;
-let enemies=[],projectiles=[],civilians=[],slashes=[],floaters=[],afterimages=[];
-let score=0,totalKills=0,totalRescued=0,combo=0,comboTimer=0,maxCombo=0,stageBanner=0,clearTimer=0,arena=null,encounterIndex=0;
+let enemies=[],projectiles=[],civilians=[],slashes=[],floaters=[],afterimages=[],pickups=[];
+let score=0,merit=0,totalKills=0,totalRescued=0,combo=0,comboTimer=0,maxCombo=0,stageBanner=0,clearTimer=0,arena=null,encounterIndex=0;
+let stageTrack={startKills:0,startRescued:0,maxCombo:0,breaks:0,rewarded:false};
 let upgradeChoices=[],selectedUpgrade=-1;
 let lootNotice=null;
 const gear={weapon:'龙胆亮银枪',armor:'白袍银甲',horse:'素鞍',treasure:'—'};
@@ -62,12 +63,12 @@ const P={x:120,y:260,vx:0,vy:0,face:1,hp:180,maxhp:180,stam:100,dragon:0,inv:0,a
  dmgMul:1,speedMul:1,dragonMul:1,maxStam:100,stamRegen:28,armor:0,dashCost:26,dashDX:1,dashDY:0};
 
 function resetRun(){
- score=0;totalKills=0;totalRescued=0;combo=0;maxCombo=0;lootNotice=null;
+ score=0;merit=0;totalKills=0;totalRescued=0;combo=0;maxCombo=0;lootNotice=null;
  Object.assign(gear,{weapon:'龙胆亮银枪',armor:'白袍银甲',horse:'素鞍',treasure:'—'});
  Object.assign(gearOwned,{stirrups:false,mirror:false,qinggang:false,tiger:false});
  Object.assign(P,{hp:180,maxhp:180,stam:100,dragon:0,dmgMul:1,speedMul:1,dragonMul:1,maxStam:100,stamRegen:28,armor:0,dashCost:26,dashDX:1,dashDY:0,qinggang:false,baby:false,weapon:'spear'});startStage(0)
 }
-function startStage(i){stageIndex=i;mode='play';time=0;stageTime=0;camX=0;shake=0;flash=0;hitStop=0;slowMo=0;enemies=[];projectiles=[];civilians=[];slashes=[];floaters=[];afterimages=[];arena=null;encounterIndex=0;clearTimer=0;stageBanner=2.8;selectedUpgrade=-1;
+function startStage(i){stageIndex=i;mode='play';time=0;stageTime=0;camX=0;shake=0;flash=0;hitStop=0;slowMo=0;enemies=[];projectiles=[];civilians=[];slashes=[];floaters=[];afterimages=[];pickups=[];arena=null;encounterIndex=0;clearTimer=0;stageBanner=2.8;selectedUpgrade=-1;stageTrack={startKills:totalKills,startRescued:totalRescued,maxCombo:0,breaks:0,rewarded:false};
  Object.assign(P,{x:115,y:260,vx:0,vy:0,face:1,stam:P.maxStam,dragon:Math.min(P.dragon,60),inv:1.0,attack:null,attackQueued:false,heavyCharge:0,dash:0,dashCd:0,ult:null,anim:0});
  P.hp=Math.min(P.maxhp,P.hp+Math.round(P.maxhp*.28)); if(i===3)P.baby=true;
 }
@@ -81,6 +82,8 @@ function bind(){
    if(k==='r'&&mode!=='title')restartStage();
    if((e.key==='Enter'||e.key===' ')&&mode==='title')resetRun();
    if(mode==='upgrade'&&['1','2','3'].includes(k))chooseUpgrade(+k-1);
+   if(mode==='upgrade'&&k==='4')buySupply();
+   if(mode==='upgrade'&&k==='5')rerollUpgrade();
    if(mode==='stageclear'&&(e.key==='Enter'||e.key===' '))openUpgrade();
    if(mode==='dead'&&(e.key==='Enter'||e.key===' '))restartStage();
    if(mode==='win'&&(e.key==='Enter'||e.key===' ')){mode='title'};
@@ -94,6 +97,24 @@ function bind(){
 bind();
 
 function floater(x,y,text,col='#f5e3b6',life=1){floaters.push({x,y,text,col,life,max:life})}
+function comboDmgMul(){return combo>=28?1.22:combo>=16?1.13:combo>=8?1.06:1}
+function comboSpeedMul(){return combo>=28?1.08:combo>=16?1.05:1}
+function comboDragonMul(){return combo>=28?1.28:combo>=16?1.14:1}
+function comboTitle(){return combo>=28?'一骑当千':combo>=16?'龙胆无双':combo>=8?'破阵之势':''}
+function spawnPickup(x,y,forced=null){
+ const r=Math.random(),type=forced||(r<.42?'food':r<.72?'dragon':'merit');
+ pickups.push({x,y,type,life:9,anim:rnd(0,6)});
+}
+function applyRandomAffix(){
+ const pool=[
+  {n:'勇',d:'攻击 +4%',a:()=>P.dmgMul*=1.04},
+  {n:'疾',d:'移动 +3%',a:()=>P.speedMul*=1.03},
+  {n:'守',d:'减伤 +3%',a:()=>P.armor=clamp(P.armor+.03,0,.42)},
+  {n:'龙',d:'龙胆获取 +8%',a:()=>P.dragonMul*=1.08},
+  {n:'骑',d:'体力 +10',a:()=>{P.maxStam+=10;P.stam=Math.min(P.maxStam,P.stam+10)}}
+ ];
+ const a=pool[(Math.random()*pool.length)|0];a.a();return a;
+}
 function slash(x,y,w,h,face=1,col='#f4efd9',life=.12){slashes.push({x,y,w,h,face,col,life,max:life})}
 function bodyRect(o){return{x:o.x-12,y:o.y-36,w:24,h:34}}
 function screenX(wx){return wx-camX}
@@ -167,14 +188,14 @@ function applyPlayerAttack(a){
  const hb=attackHitbox(a);if(debugHit)slashes.push({debug:true,x:hb.x,y:hb.y,w:hb.w,h:hb.h,life:.02,max:.02});
  let hitAny=false;
  for(const e of enemies){if(e.dead||e.ifr>0||a.hitSet.has(e))continue; if(overlap(hb,enemyHurtRect(e))){
-   a.hitSet.add(e);const dmg=a.dmg*P.dmgMul*(P.ult?1.1:1);hurtEnemy(e,dmg,P.face*a.knock,(e.y-P.y)*2,a.guardBreak,a.kind==='heavy'||a.chain===3);hitAny=true;
+   a.hitSet.add(e);const dmg=a.dmg*P.dmgMul*comboDmgMul()*(P.ult?1.1:1);hurtEnemy(e,dmg,P.face*a.knock,(e.y-P.y)*2,a.guardBreak,a.kind==='heavy'||a.chain===3);hitAny=true;
  }}
  if(hitAny){const span=a.reach-(a.near||0);hitStop=Math.max(hitStop,a.kind==='heavy'?.085:.045);shake=Math.max(shake,a.kind==='heavy'?4:2);slash(P.x+P.face*((a.near||0)+span*.56),P.y-28,span*.84,18,P.face,a.kind==='heavy'?'#fff1bd':'#eef1e8',.10)}
 }
 function hurtEnemy(e,dmg,kx,ky,guardBreak=false,stagger=false){
  if(e.dead)return;
  if(e.guard>0&&!guardBreak){dmg*=.22;kx*=.12;floater(e.x,e.y-48,'格挡','#d9d4bd',.55)}
- else if(e.guard>0&&guardBreak){e.guard=0;floater(e.x,e.y-48,'破防！','#ffe39a',.7);dmg*=1.30;stagger=true}
+ else if(e.guard>0&&guardBreak){e.guard=0;floater(e.x,e.y-48,'破防！','#ffe39a',.7);dmg*=1.30;stagger=true;if(e.boss){stageTrack.breaks++;merit+=8;floater(e.x,e.y-76,'战功 +8','#e8d49c',.55)}}
  if(e.boss)dmg*=.68;
  e.hp-=dmg;e.flash=stagger&&e.boss?.15:.075;e.ifr=.025;
  if(e.boss&&stagger){
@@ -184,24 +205,28 @@ function hurtEnemy(e,dmg,kx,ky,guardBreak=false,stagger=false){
  }else e.stun=e.boss?0:.13;
  e.knockX+=kx*(e.boss?(stagger?.32:.06):1);e.knockY+=ky*(e.boss?.16:1);e.hitCount++;
  if(e.boss&&!guardBreak&&e.hitCount%6===0){e.guard=.72;floater(e.x,e.y-58,'架势','#d9d4bd',.45)}
- combo++;comboTimer=2.2;maxCombo=Math.max(maxCombo,combo);score+=Math.round(dmg*(1+Math.min(combo,30)*.03));P.dragon=clamp(P.dragon+(e.boss?3.5:6)*P.dragonMul,0,100);
+ combo++;comboTimer=2.2;maxCombo=Math.max(maxCombo,combo);stageTrack.maxCombo=Math.max(stageTrack.maxCombo,combo);score+=Math.round(dmg*(1+Math.min(combo,30)*.03));P.dragon=clamp(P.dragon+(e.boss?3.5:6)*P.dragonMul*comboDragonMul(),0,100);
  floater(e.x,e.y-e.h-5,Math.round(dmg).toString(),e.boss?'#ffe19a':'#f5e7c9',.48);
  if(e.hp<=0){e.hp=0;e.dead=true;e.flash=0;e.deathTimer=e.boss?.7:.34;totalKills++;score+=e.boss?1200:120;
-   if(e.boss){awardBossGear(e);shake=7;flash=.12;floater(e.x,e.y-70,`${e.name} · 击破`,'#fff0b0',1.5)}else floater(e.x,e.y-48,'斩','#e9d39f',.55)}
+   const gain=e.boss?100:(e.type==='elite'?24:10);merit+=gain;
+   if(e.boss){awardBossGear(e);shake=7;flash=.12;floater(e.x,e.y-70,`${e.name} · 击破`,'#fff0b0',1.5)}
+   else {floater(e.x,e.y-48,`斩 · 战功+${gain}`,'#e9d39f',.55);if(Math.random()<(e.type==='elite'?.42:.18))spawnPickup(e.x,e.y-12)}
+ }
 }
 function awardBossGear(e){
+ const a=applyRandomAffix();
  if(e.bossKind==='captain'&&!gearOwned.stirrups){
-   gearOwned.stirrups=true;gear.horse='精钢马镫';P.speedMul*=1.06;P.dashCost=Math.max(18,P.dashCost-4);
-   lootNotice={t:3.2,title:'获得装备：精钢马镫',desc:'移动 +6% · 冲阵体力消耗 -4'};
+   gearOwned.stirrups=true;gear.horse='精钢马镫·'+a.n;P.speedMul*=1.06;P.dashCost=Math.max(18,P.dashCost-4);
+   lootNotice={t:3.4,title:'获得装备：'+gear.horse,desc:'移动 +6% · 冲阵耗体 -4 · '+a.d};
  }else if(e.bossKind==='chunyu'&&!gearOwned.mirror){
-   gearOwned.mirror=true;gear.armor='玄铁护心镜';P.maxhp+=25;P.hp=Math.min(P.maxhp,P.hp+25);P.armor=clamp(P.armor+.08,0,.42);
-   lootNotice={t:3.2,title:'获得装备：玄铁护心镜',desc:'生命 +25 · 受到伤害 -8%'};
+   gearOwned.mirror=true;gear.armor='玄铁护心镜·'+a.n;P.maxhp+=25;P.hp=Math.min(P.maxhp,P.hp+25);P.armor=clamp(P.armor+.08,0,.42);
+   lootNotice={t:3.4,title:'获得装备：'+gear.armor,desc:'生命 +25 · 减伤 +8% · '+a.d};
  }else if(e.bossKind==='xiahou'&&!gearOwned.qinggang){
-   gearOwned.qinggang=true;P.qinggang=true;gear.weapon='龙胆亮银枪 / 青釭剑';
-   lootNotice={t:3.5,title:'获得装备：青釭剑',desc:'按 E 在亮银枪与青釭剑之间切换'};
+   gearOwned.qinggang=true;P.qinggang=true;gear.weapon='青釭剑·'+a.n;
+   lootNotice={t:3.6,title:'获得装备：'+gear.weapon,desc:'按 E 切换武器 · '+a.d};
  }else if(e.bossKind==='zhanghe'&&!gearOwned.tiger){
-   gearOwned.tiger=true;gear.treasure='虎符';P.dragonMul*=1.10;
-   lootNotice={t:3.2,title:'获得宝物：虎符',desc:'龙胆获取 +10% · 通关战利品'};
+   gearOwned.tiger=true;gear.treasure='虎符·'+a.n;P.dragonMul*=1.10;
+   lootNotice={t:3.4,title:'获得宝物：'+gear.treasure,desc:'龙胆获取 +10% · '+a.d};
  }
 }
 function hurtPlayer(dmg,sourceX,isBoss=false){
@@ -220,7 +245,7 @@ function updatePlayer(dt){
  if(P.ult){updateUlt(dt);return}
  if(P.dash>0){
    P.dash-=dt;P.x+=P.dashDX*290*dt;P.y+=P.dashDY*290*dt;P.y=clamp(P.y,LANE_TOP,LANE_BOTTOM);
-   const hb={x:P.face>0?P.x-2:P.x-68,y:P.y-51,w:70,h:52};for(const e of enemies){if(e.dead||P.dashHits.has(e))continue;if(overlap(hb,enemyHurtRect(e))){P.dashHits.add(e);hurtEnemy(e,30*P.dmgMul,P.face*185,0,true,true);hitStop=.035}}
+   const hb={x:P.face>0?P.x-2:P.x-68,y:P.y-51,w:70,h:52};for(const e of enemies){if(e.dead||P.dashHits.has(e))continue;if(overlap(hb,enemyHurtRect(e))){P.dashHits.add(e);hurtEnemy(e,30*P.dmgMul*comboDmgMul(),P.face*185,0,true,true);hitStop=.035}}
    if(Math.random()<.26)afterimages.push({x:P.x,y:P.y,face:P.face,life:.14});return;
  }
 
@@ -233,7 +258,7 @@ function updatePlayer(dt){
  const lockMove=P.attack?0.42:(P.heavyCharge>0?0.38:1);
  let ix=(keys['d']?1:0)-(keys['a']?1:0),iy=(keys['s']?1:0)-(keys['w']?1:0),m=Math.hypot(ix,iy)||1;ix/=m;iy/=m;
  if(ix!==0)P.face=ix>0?1:-1; else if(Math.abs(mouse.x-W/2)>45)P.face=mouse.x>W/2?1:-1;
- const sp=188*P.speedMul;P.vx+=(ix*sp*lockMove-P.vx)*Math.min(1,dt*10);P.vy+=(iy*sp*.70*lockMove-P.vy)*Math.min(1,dt*10);
+ const sp=188*P.speedMul*comboSpeedMul();P.vx+=(ix*sp*lockMove-P.vx)*Math.min(1,dt*10);P.vy+=(iy*sp*.70*lockMove-P.vy)*Math.min(1,dt*10);
  P.x+=P.vx*dt;P.y+=P.vy*dt;
  const st=STAGES[stageIndex];let left=35,right=st.worldW-35;if(arena){left=Math.max(left,arena.left);right=Math.min(right,arena.right)}P.x=clamp(P.x,left,right);P.y=clamp(P.y,LANE_TOP,LANE_BOTTOM);
 }
@@ -243,7 +268,7 @@ function updateUlt(dt){
  while(u.step<newStep&&u.step<total){u.step++;const dir=P.face;P.x+=dir*(u.step===7?80:44);P.x=clamp(P.x,arena?arena.left:35,arena?arena.right:STAGES[stageIndex].worldW-35);
    const hb={x:dir>0?P.x-10:P.x-125,y:P.y-72,w:135,h:88};
    slash(P.x+dir*50,P.y-30,120,26,dir,u.step===7?'#ffe9a8':'#f2f0df',.15);shake=4;hitStop=.035;
-   for(const e of enemies){if(e.dead)continue;if(overlap(hb,enemyHurtRect(e))){const key=e;hurtEnemy(e,(u.step===7?68:38)*P.dmgMul,dir*(u.step===7?270:90),0,true,true)}}
+   for(const e of enemies){if(e.dead)continue;if(overlap(hb,enemyHurtRect(e))){const key=e;hurtEnemy(e,(u.step===7?68:38)*P.dmgMul*comboDmgMul(),dir*(u.step===7?270:90),0,true,true)}}
    afterimages.push({x:P.x-dir*18,y:P.y,face:dir,life:.18});
  }
  if(u.t>1.62){P.ult=null;slowMo=0;P.inv=.45;flash=.08}
@@ -296,15 +321,34 @@ function updateStage(dt){
  if(!arena&&encounterIndex<st.encounters.length&&P.x>st.encounters[encounterIndex].x){spawnWave(st.encounters[encounterIndex]);encounterIndex++}
  if(arena){const alive=enemies.some(e=>!e.dead);if(!alive){arena.clearHold+=dt;if(arena.clearHold>.85){arena=null;P.dragon=clamp(P.dragon+14,0,100);floater(P.x,P.y-70,'阵破！','#ffe2a3',.8)}}}
  if(encounterIndex>=st.encounters.length&&!arena&&!enemies.some(e=>!e.dead)&&P.x>st.worldW-160){
-   if(stageIndex===2&&!P.qinggang){P.qinggang=true;gearOwned.qinggang=true;gear.weapon='龙胆亮银枪 / 青釭剑';floater(P.x,P.y-74,'获得：青釭剑（E切换）','#fff0a8',1.8)}
-   if(stageIndex===STAGES.length-1){mode='win'} else {mode='stageclear';clearTimer=0}
+   if(stageIndex===2&&!P.qinggang){P.qinggang=true;gearOwned.qinggang=true;gear.weapon='青釭剑';floater(P.x,P.y-74,'获得：青釭剑（E切换）','#fff0a8',1.8)}
+   resolveObjective();if(stageIndex===STAGES.length-1){mode='win'} else {mode='stageclear';clearTimer=0}
  }
 }
 function updateProjectiles(dt){
  for(const p of projectiles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;if(overlap({x:p.x-6,y:p.y-3,w:12,h:6},playerHurtRect())){hurtPlayer(p.damage,p.x);p.life=0}}
  projectiles=projectiles.filter(p=>p.life>0&&p.x>camX-50&&p.x<camX+W+100)
 }
-function updateCivs(dt){for(const c of civilians){c.anim+=dt*4;if(!c.saved&&dist(P,c)<28){c.saved=true;totalRescued++;score+=250;P.hp=Math.min(P.maxhp,P.hp+18);P.dragon=clamp(P.dragon+20,0,100);floater(c.x,c.y-42,'救出 +250','#ffe5a8',1.0)}}}
+function updateCivs(dt){for(const c of civilians){c.anim+=dt*4;if(!c.saved&&dist(P,c)<28){c.saved=true;totalRescued++;score+=250;merit+=35;P.hp=Math.min(P.maxhp,P.hp+18);P.dragon=clamp(P.dragon+20,0,100);floater(c.x,c.y-42,'救出 · 战功+35','#ffe5a8',1.0)}}}
+function updatePickups(dt){
+ for(const p of pickups){p.life-=dt;p.anim+=dt*5;if(dist(P,p)<30){p.life=0;
+   if(p.type==='food'){const v=Math.round(P.maxhp*.16);P.hp=Math.min(P.maxhp,P.hp+v);floater(p.x,p.y-26,'军粮 +'+v+'生命','#f2ddb0',.75)}
+   else if(p.type==='dragon'){P.dragon=clamp(P.dragon+24,0,100);floater(p.x,p.y-26,'龙胆 +24','#d8e6e5',.75)}
+   else {merit+=35;floater(p.x,p.y-26,'战功 +35','#ead39a',.75)}
+ }}
+ pickups=pickups.filter(p=>p.life>0);
+}
+function objectiveInfo(){
+ if(stageIndex===0)return {t:'挑战：达成 12 连击',ok:stageTrack.maxCombo>=12,r:80};
+ if(stageIndex===1)return {t:'挑战：本关救出至少 4 人',ok:(totalRescued-stageTrack.startRescued)>=4,r:100};
+ if(stageIndex===2)return {t:'挑战：对Boss破势 3 次',ok:stageTrack.breaks>=3,r:120};
+ return {t:'挑战：最终突围时生命 ≥45%',ok:P.hp/P.maxhp>=.45,r:150};
+}
+function resolveObjective(){
+ if(stageTrack.rewarded)return;stageTrack.rewarded=true;const o=objectiveInfo();
+ if(o.ok){merit+=o.r;score+=o.r*5;floater(P.x,P.y-82,'挑战完成 · 战功 +'+o.r,'#fff0aa',1.4)}
+ else floater(P.x,P.y-82,'挑战未完成','#c9baa0',1.0);
+}
 
 const UPGRADES=[
  {name:'百鸟朝凤',desc:'长枪/青釭伤害 +18%',apply:()=>P.dmgMul*=1.18},
@@ -316,13 +360,22 @@ const UPGRADES=[
 ];
 function openUpgrade(){mode='upgrade';upgradeChoices=[];const pool=[...UPGRADES];while(upgradeChoices.length<3){upgradeChoices.push(pool.splice((Math.random()*pool.length)|0,1)[0])}}
 function chooseUpgrade(i){if(mode!=='upgrade'||!upgradeChoices[i])return;upgradeChoices[i].apply();selectedUpgrade=i;startStage(stageIndex+1)}
+function buySupply(){
+ if(merit<100){lootNotice={t:1.5,title:'战功不足',desc:'补给需要 100 战功'};return}
+ if(P.hp>=P.maxhp){lootNotice={t:1.5,title:'无需补给',desc:'当前生命已满'};return}
+ merit-=100;P.hp=Math.min(P.maxhp,P.hp+Math.round(P.maxhp*.30));lootNotice={t:1.8,title:'军需补给',desc:'消耗 100 战功 · 回复 30% 生命'};
+}
+function rerollUpgrade(){
+ if(merit<80){lootNotice={t:1.5,title:'战功不足',desc:'刷新需要 80 战功'};return}
+ merit-=80;openUpgrade();lootNotice={t:1.6,title:'整备刷新',desc:'消耗 80 战功 · 新的三选一'};
+}
 
 function update(dt){
 time+=dt;stageBanner=Math.max(0,stageBanner-dt);flash=Math.max(0,flash-dt);shake*=Math.pow(.018,dt);comboTimer=Math.max(0,comboTimer-dt);if(comboTimer<=0)combo=0;if(lootNotice){lootNotice.t-=dt;if(lootNotice.t<=0)lootNotice=null;}
  if(mode!=='play'){for(const k in pressed)delete pressed[k];return;}
  if(hitStop>0){hitStop-=dt;return}
  const scaled=dt*(slowMo>0?slowMo:1);stageTime+=scaled;
- updatePlayer(dt);for(const e of enemies)updateEnemy(e,scaled);updateArcherAttacks(scaled);updateProjectiles(scaled);updateCivs(scaled);updateStage(scaled);
+ updatePlayer(dt);for(const e of enemies)updateEnemy(e,scaled);updateArcherAttacks(scaled);updateProjectiles(scaled);updateCivs(scaled);updatePickups(scaled);updateStage(scaled);
  enemies=enemies.filter(e=>!e.dead||e.deathTimer>0);slashes.forEach(s=>s.life-=dt);slashes=slashes.filter(s=>s.life>0);floaters.forEach(f=>{f.life-=dt;f.y-=18*dt});floaters=floaters.filter(f=>f.life>0);afterimages.forEach(a=>a.life-=dt);afterimages=afterimages.filter(a=>a.life>0);
  // Camera dead-zone: allow real left/right footsies instead of snapping Zhao Yun back toward one screen position.
  const maxCam=Math.max(0,STAGES[stageIndex].worldW-W),sx=P.x-camX;
@@ -447,6 +500,12 @@ function drawBossBar(e){
 }
 function drawCiv(c){if(c.saved)return;const x=screenX(c.x),bob=(Math.sin(c.anim)*1)|0;shadow(x,c.y,16);px(x-6,c.y-25+bob,12,14,'#7b795e');px(x-5,c.y-36+bob,10,10,'#cda981');px(x-7,c.y-42+bob,14,6,'#4d3b2e');px(x-5,c.y-10+bob,4,10,'#514334');px(x+2,c.y-10+bob,4,10,'#514334');txt('!',x,c.y-50,10,'#ffe49b','center')}
 function drawProjectile(p){const x=screenX(p.x);g.save();g.translate(x,p.y);if(p.face<0)g.scale(-1,1);px(-8,-1,17,2,'#77502e');px(8,-3,5,6,'#d0d2c8');g.restore()}
+function drawPickup(p){
+ const x=screenX(p.x),b=Math.sin(p.anim)*2;
+ if(p.type==='food'){px(x-7,p.y-13+b,14,11,'#8c5a35');px(x-4,p.y-17+b,8,5,'#d6b676');txt('粮',x,p.y-8+b,7,'#f5e5b9','center')}
+ else if(p.type==='dragon'){px(x-6,p.y-15+b,12,12,'#c7d8d8');px(x-3,p.y-19+b,6,5,'#e8eeee');txt('胆',x,p.y-9+b,7,'#304a55','center')}
+ else {px(x-7,p.y-14+b,14,12,'#c6a252');px(x-4,p.y-11+b,8,3,'#7d612d');txt('功',x,p.y-8+b,7,'#31240f','center')}
+}
 function drawSlash(s){const x=screenX(s.x);if(s.debug){g.strokeStyle=s.enemy?'#ff655c':'#5cff77';g.strokeRect(Math.round(x),Math.round(s.y),Math.round(s.w),Math.round(s.h));return}g.globalAlpha=clamp(s.life/s.max,0,1);g.fillStyle=s.col;const dir=s.face>0?1:-1;g.fillRect(Math.round(x-(dir<0?s.w:0)),Math.round(s.y-s.h/2),Math.round(s.w),4);g.fillRect(Math.round(x+dir*12-(dir<0?s.w:0)),Math.round(s.y-s.h/2+6),Math.round(s.w*.72),3);g.globalAlpha=1}
 function drawFloaters(){for(const f of floaters){g.globalAlpha=clamp(f.life/(f.max*.5),0,1);txt(f.text,screenX(f.x),f.y,9,f.col,'center');g.globalAlpha=1}}
 function drawUI(){
@@ -454,9 +513,9 @@ function drawUI(){
  px(56,17,146,9,'#29221c');px(57,18,144*P.hp/P.maxhp,7,'#b63b35');txt(`${Math.ceil(P.hp)}/${P.maxhp}`,206,22,7,'#f2e6d0','right');
  px(56,32,146,7,'#26251f');px(57,33,144*P.stam/P.maxStam,5,'#c8a44c');txt('战马',20,35,7,'#ded4bd');
  px(56,45,146,7,'#26251f');px(57,46,144*P.dragon/100,5,'#d5e0de');txt('龙胆',20,48,7,'#ded4bd');
- txt(`SCORE ${score}`,W-12,16,9,'#f5e3b0','right');txt(`斩 ${totalKills}  救 ${totalRescued}`,W-12,30,8,'#ddd3bb','right');
- if(combo>1&&comboTimer>0){txt(`${combo} HIT`,W-16,66,20,'#ffe2a0','right');txt(combo>=20?'一骑当千！':combo>=10?'势如破竹':'连击',W-18,84,8,'#ead39b','right')}
- const st=STAGES[stageIndex];txt(`${stageIndex+1}/4  ${st.name.replace(/.*· /,'')}`,W/2,16,8,'#e9ddbf','center');
+ txt(`SCORE ${score}`,W-12,16,9,'#f5e3b0','right');txt(`战功 ${merit}   斩 ${totalKills}  救 ${totalRescued}`,W-12,30,8,'#ddd3bb','right');
+ if(combo>1&&comboTimer>0){txt(`${combo} HIT`,W-16,66,20,'#ffe2a0','right');txt(comboTitle()||'连击',W-18,84,8,'#ead39b','right')}
+ const st=STAGES[stageIndex],obj=objectiveInfo();txt(`${stageIndex+1}/4  ${st.name.replace(/.*· /,'')}`,W/2,16,8,'#e9ddbf','center');txt(`${obj.ok?'✓':'◇'} ${obj.t}`,W/2,44,7,obj.ok?'#e7d68f':'#aead9d','center');
  txt(`装备 [I]  ${gear.horse}${gearOwned.mirror?' · '+gear.armor:''}`,W/2,30,7,'#cfc5aa','center');
  if(P.dragon>=100&&((time*5)|0)%2===0)txt('Q  龙胆七探 READY',W/2,H-16,10,'#fff0ad','center');
  if(P.heavyCharge<=0&&stageTime<16)txt('K按住蓄力 → 松开破阵突刺（可破Boss架势）',W/2,H-29,7,'#d8c9a5','center');
@@ -478,7 +537,7 @@ function drawGear(){
   ['宝物',gear.treasure,gearOwned.tiger?'龙胆获取 +10%':'尚未获得']
  ];
  rows.forEach((r,i)=>{const y=112+i*39;box(132,y-14,376,31,'#1a1d17','#625943');txt(r[0],148,y,8,'#cbbd9d');txt(r[1],214,y-2,10,'#f3e1b7');txt(r[2],494,y+9,7,'#bfb49c','right')});
- txt(`攻击 ×${P.dmgMul.toFixed(2)}   移动 ×${P.speedMul.toFixed(2)}   减伤 ${Math.round(P.armor*100)}%`,W/2,278,8,'#e0d2b3','center');
+ txt(`攻击 ×${P.dmgMul.toFixed(2)}   移动 ×${P.speedMul.toFixed(2)}   减伤 ${Math.round(P.armor*100)}%   战功 ${merit}`,W/2,278,8,'#e0d2b3','center');
  txt('按 I 返回战场',W/2,296,8,'#ffe7aa','center');
 }
 function drawBanner(){if(stageBanner<=0)return;const a=clamp(stageBanner/.45,0,1);g.globalAlpha=a;box(120,102,400,96,'#10110deb','#86744d');txt(STAGES[stageIndex].name,W/2,128,20,'#f0d89f','center');txt(STAGES[stageIndex].sub,W/2,153,11,'#d7c49a','center');txt(STAGES[stageIndex].story,W/2,181,8,'#ddd4c0','center');g.globalAlpha=1}
@@ -487,18 +546,27 @@ function drawTitle(){
  txt('子 龙 传',W/2,82,38,'#ead7a0','center');txt('长 坂 孤 骑',W/2,122,17,'#c7b487','center');txt('ARCADE PIXEL EDITION',W/2,148,8,'#91866f','center');
  const ox=P.x,oy=P.y,of=P.face;P.x=220;P.y=278;P.face=1;drawHorsePlayer(P.x,P.y,1,1);P.x=ox;P.y=oy;P.face=of;
  const fake={x:430,y:279,type:'elite',boss:false,face:-1,flash:0,anim:0,w:18,h:36};drawSoldier(fake);
- txt('四关街机流程 · 装备掉落 · Boss破势 · 过关强化 · 青釭剑',W/2,298,9,'#d8ceb7','center');
+ txt('四关街机流程 · 装备词条 · 战功整备 · 战场挑战 · 连击气势',W/2,298,9,'#d8ceb7','center');
  txt('K按住蓄力，松开=破阵突刺；二段以上破防，满蓄强硬直',W/2,315,8,'#cdbf9f','center');txt('点击 / ENTER 开始',W/2,338,11,'#ffe09a','center')
 }
-function drawStageClear(){box(118,84,404,188,'#10110eed','#8d774c');txt('STAGE CLEAR',W/2,112,24,'#f0d79a','center');txt(STAGES[stageIndex].name,W/2,144,11,'#e2d4b8','center');txt(`斩敌 ${totalKills}   救人 ${totalRescued}   最大连击 ${maxCombo}`,W/2,181,9,'#d8cdb7','center');txt(`当前得分 ${score}`,W/2,207,12,'#ffe1a0','center');txt('按 ENTER 选择过关强化',W/2,242,10,'#fff0b2','center')}
-function drawUpgrade(){box(66,52,508,256,'#10110eee','#8d774c');txt('选择一项强化',W/2,78,20,'#f0d79a','center');upgradeChoices.forEach((u,i)=>{const x=90+i*165;box(x,112,145,152,'#1d2018','#716345');txt(`${i+1}`,x+72,132,14,'#ffe0a0','center');txt(u.name,x+72,163,12,'#f1e1b9','center');const parts=u.desc.match(/.{1,11}/g)||[u.desc];parts.forEach((s,j)=>txt(s,x+72,196+j*16,8,'#cfc5ae','center'))});txt('按 1 / 2 / 3 选择',W/2,286,9,'#ffe8ad','center')}
+function drawStageClear(){
+ const o=objectiveInfo();box(118,76,404,205,'#10110eed','#8d774c');txt('STAGE CLEAR',W/2,102,24,'#f0d79a','center');txt(STAGES[stageIndex].name,W/2,132,11,'#e2d4b8','center');
+ txt(`本关最高连击 ${stageTrack.maxCombo}   破势 ${stageTrack.breaks}   战功 ${merit}`,W/2,166,8,'#d8cdb7','center');
+ txt(o.ok?`挑战完成 +${o.r}战功`:'挑战未完成',W/2,188,9,o.ok?'#ffe1a0':'#aaa08d','center');
+ txt(`当前得分 ${score}`,W/2,214,11,'#ffe1a0','center');txt('ENTER：战后整备',W/2,248,10,'#fff0b2','center')
+}
+function drawUpgrade(){
+ box(54,42,532,276,'#10110eee','#8d774c');txt('战 后 整 备',W/2,68,20,'#f0d79a','center');txt(`可用战功：${merit}`,W/2,90,8,'#d9c9a6','center');
+ upgradeChoices.forEach((u,i)=>{const x=82+i*168;box(x,111,148,137,'#1d2018','#716345');txt(`${i+1}`,x+74,130,14,'#ffe0a0','center');txt(u.name,x+74,158,11,'#f1e1b9','center');const parts=u.desc.match(/.{1,11}/g)||[u.desc];parts.forEach((ss,j)=>txt(ss,x+74,190+j*15,8,'#cfc5ae','center'))});
+ txt('1/2/3 选择强化',W/2,265,8,'#ffe8ad','center');txt('4 军需补给(100战功/回30%生命)   5 刷新三选一(80战功)',W/2,290,7,'#cfc2a5','center')
+}
 function drawDead(){box(160,88,320,176,'#120f0eee','#794f45');txt('败 走 长 坂',W/2,126,25,'#dba89c','center');txt(`本关：${STAGES[stageIndex].name}`,W/2,164,9,'#d8c9b7','center');txt('按 ENTER / R 重试本关',W/2,214,10,'#ffe0a0','center')}
 function drawWin(){box(98,60,444,244,'#100f0dee','#947d4d');txt('一 身 是 胆',W/2,98,31,'#f1d79a','center');txt('赵子龙怀抱阿斗，杀出长坂。',W/2,139,11,'#e4d6ba','center');txt(`总斩敌 ${totalKills}   救人 ${totalRescued}`,W/2,181,10,'#ddd1b8','center');txt(`最高连击 ${maxCombo}   最终得分 ${score}`,W/2,207,10,'#ffe1a0','center');txt(P.qinggang?'青釭剑已夺 · 四关全破':'四关全破',W/2,238,9,'#cdbf9f','center');txt('按 ENTER 返回标题',W/2,277,9,'#ffe7aa','center')}
 function draw(){
  if(mode==='title'){drawTitle();return}
  const sx=shake?Math.round(rnd(-shake,shake)):0,sy=shake?Math.round(rnd(-shake,shake)):0;g.save();g.translate(sx,sy);drawWorld();
  const drawables=[];for(const c of civilians)if(!c.saved)drawables.push({y:c.y,kind:'c',o:c});for(const e of enemies)drawables.push({y:e.y,kind:'e',o:e});drawables.push({y:P.y,kind:'p'});drawables.sort((a,b)=>a.y-b.y);for(const d of drawables){if(d.kind==='c')drawCiv(d.o);else if(d.kind==='e')drawSoldier(d.o);else drawPlayer()}
- for(const p of projectiles)drawProjectile(p);for(const s of slashes)drawSlash(s);drawFloaters();g.restore();drawUI();drawBanner();
+ for(const p of pickups)drawPickup(p);for(const p of projectiles)drawProjectile(p);for(const s of slashes)drawSlash(s);drawFloaters();g.restore();drawUI();drawBanner();
  if(flash>0){g.fillStyle=`rgba(255,247,220,${Math.min(.45,flash*3)})`;g.fillRect(0,0,W,H)}
  if(mode==='stageclear')drawStageClear();if(mode==='upgrade')drawUpgrade();if(mode==='gear')drawGear();if(mode==='dead')drawDead();if(mode==='win')drawWin();
 }
