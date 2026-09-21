@@ -378,7 +378,14 @@ function enemyStartAttack(e,kind,skillName='',hyper=false){
  if(hyper)e.hyper=e.attack.wind+e.attack.active+.12;
 }
 function bossUseSkill(e){
- const r=Math.random();e.skillCd=(e.rage?2.2:2.8)+rnd(0,.65)+(e.bossKind==='zhanghe'?.65:0);
+ const r=Math.random(),d=Math.hypot(P.x-e.x,(P.y-e.y)*.82);e.skillCd=(e.rage?2.2:2.8)+rnd(0,.65)+(e.bossKind==='zhanghe'?.65:0);
+ if(d>185){
+   if(e.bossKind==='captain')enemyStartAttack(e,'bossRush','骁骑突阵',true);
+   else if(e.bossKind==='chunyu')enemyStartAttack(e,'bossPierce','贯阵枪',true);
+   else if(e.bossKind==='xiahou')enemyStartAttack(e,'bossWave','青釭剑气',true);
+   else enemyStartAttack(e,'bossVolley','乱箭压阵',false);
+   return;
+ }
  if(e.bossKind==='captain'){if(r<.55)enemyStartAttack(e,'bossRush','骁骑突阵',true);else enemyStartAttack(e,'bossWhirl','横刀断路',true)}
  else if(e.bossKind==='chunyu'){if(r<.56)enemyStartAttack(e,'bossPierce','贯阵枪',true);else enemyStartAttack(e,'bossWhirl','旋枪封路',true)}
  else if(e.bossKind==='xiahou'){if(r<.52)enemyStartAttack(e,'bossWave','青釭剑气',true);else enemyStartAttack(e,'bossTriple','青釭三连',true)}
@@ -677,7 +684,7 @@ function drawUI(){
  txt(`SCORE ${score}`,W-12,16,9,'#f5e3b0','right');txt(`战功 ${merit}   斩 ${totalKills}  救 ${totalRescued}`,W-12,30,8,'#ddd3bb','right');
  if(combo>1&&comboTimer>0){txt(`${combo} HIT`,W-16,66,20,'#ffe2a0','right');txt(comboTitle()||'连击',W-18,84,8,'#ead39b','right')}
  const st=STAGES[stageIndex],obj=objectiveInfo();txt(`${stageIndex+1}/4  ${st.name.replace(/.*· /,'')}`,W/2,14,8,'#e9ddbf','center');
- txt(`装备[I] ${gear.horse}${gearOwned.mirror?' · '+gear.armor:''}`,W/2,27,7,'#cfc5aa','center');if(P.qinggang)txt(P.weapon==='spear'?'枪：远距 / 蓄力破阵':'剑：四连快斩 / 横斩断箭',W/2,52,7,P.weapon==='spear'?'#d8c9a5':'#cfe0de','center');
+ txt(`装备[I] ${gear.horse}${gearOwned.mirror?' · '+gear.armor:''}`,W/2,27,7,'#cfc5aa','center');if(P.qinggang)txt(P.weapon==='spear'?'枪：远距 / 蓄力破阵':'剑：四连快斩 / 横斩断箭',20,78,7,P.weapon==='spear'?'#d8c9a5':'#cfe0de','left');
  txt(`${obj.ok?'✓':'◇'} ${obj.t}`,W/2,40,7,obj.ok?'#e7d68f':'#aead9d','center');
  if(P.dragon>=P.ultCost&&((time*5)|0)%2===0)txt(`Q  龙胆七探 READY · 消耗${P.ultCost}`,W/2,H-16,10,'#fff0ad','center');
  if(P.heavyCharge<=0&&stageTime<16)txt('K按住蓄力 → 松开破阵突刺（可破Boss架势）',W/2,H-29,7,'#d8c9a5','center');
