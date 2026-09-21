@@ -135,7 +135,7 @@ function spawnEnemy(type,x,y,bossKind=null){
    if(a==='fury'){affixLabel='悍勇';hp=165;damage=20}
  }
  if(type==='boss'){boss=true;w=31;h=50;
-   const map={captain:['曹强',1050,54,14],chunyu:['淳于导',1550,59,16],xiahou:['夏侯恩',1950,64,18],zhanghe:['张郃',2700,70,20]};
+   const map={captain:['S强',1050,54,14],chunyu:['淳于导',1550,59,16],xiahou:['夏侯恩',1950,64,18],zhanghe:['张郃',2700,70,20]};
    const m=map[bossKind];name=m[0];hp=m[1];speed=m[2];damage=m[3];
  }
  const e={x,y,vx:0,vy:0,type,boss,bossKind,name,hp,maxhp:hp,speed,damage,w,h,face:-1,stun:0,stunVisual:0,breakFlash:0,flash:0,ifr:0,attack:null,ai:0,skillCd:boss?1.4+rnd(0,.7):0,hyper:0,dead:false,knockX:0,knockY:0,anim:rnd(0,10),rage:false,guard:affix==='iron'?.45:0,hitCount:0,deathTimer:0,special1:false,special2:false,affix,affixLabel,armorMul,affixActive:false,challenge:false};
@@ -366,8 +366,8 @@ function enemyAttackBox(e,a){const x=e.face>0?e.x+8:e.x-a.reach-8;return{x,y:e.y
 function triggerBossSpecial(e,phase){
  const y1=clamp(e.y-48,LANE_TOP,LANE_BOTTOM),y2=clamp(e.y+48,LANE_TOP,LANE_BOTTOM);
  if(e.bossKind==='captain'){
-  if(phase===1){e.guard=1.35;spawnEnemy('sword',e.x+105,y1);spawnEnemy('spear',e.x+145,y2);floater(e.x,e.y-73,'曹强 · 列阵！','#ffd79a',1.1)}
-  else {e.speed*=1.07;e.damage*=1.08;floater(e.x,e.y-73,'曹强 · 死战！','#ffb58e',1.1)}
+  if(phase===1){e.guard=1.35;spawnEnemy('sword',e.x+105,y1);spawnEnemy('spear',e.x+145,y2);floater(e.x,e.y-73,'S强 · 列阵！','#ffd79a',1.1)}
+  else {e.speed*=1.07;e.damage*=1.08;floater(e.x,e.y-73,'S强 · 死战！','#ffb58e',1.1)}
  }else if(e.bossKind==='chunyu'){
   if(phase===1){e.guard=1.0;spawnEnemy('spear',e.x+95,y1);spawnEnemy('spear',e.x+135,y2);floater(e.x,e.y-73,'淳于导 · 枪阵！','#ffd79a',1.1)}
   else {e.speed*=1.08;e.guard=1.0;floater(e.x,e.y-73,'枪阵收束！','#ffcf8e',1.0)}
